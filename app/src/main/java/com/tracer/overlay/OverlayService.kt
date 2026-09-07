@@ -1,12 +1,12 @@
 package com.tracer.overlay
 
-import com.tracer.overlay.R
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ColorMatrix
@@ -26,6 +26,7 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import kotlin.math.abs
 
@@ -44,7 +45,6 @@ class OverlayService : Service() {
         private const val MIN_OPACITY = 0.10f
         private const val MAX_OPACITY = 0.80f
         private const val DEFAULT_OPACITY = 0.30f
-
         private const val TAP_MOVE_SLOP_PX = 12f
     }
 
@@ -92,16 +92,36 @@ class OverlayService : Service() {
             ACTION_STOP -> { stopSelf(); return START_NOT_STICKY }
         }
 
-        startForeground(NOTIF_ID, buildNotification())
+        try {
+            val notification = buildNotification()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val fgsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                } else {
+                    0
+                }
+                startForeground(NOTIF_ID, notification, fgsType)
+            } else {
+                startForeground(NOTIF_ID, notification)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start foreground service", e)
+        }
 
         val imageUriString = intent?.getStringExtra(EXTRA_IMAGE_URI)
         if (overlayRootView == null && imageUriString != null) {
-            loadImage(Uri.parse(imageUriString))
-            if (originalBitmap != null) {
-                setupOverlayWindow()
-                setupUnlockBubble()
-            } else {
-                Log.e(TAG, "Bitmap failed to decode; stopping overlay service.")
+            try {
+                loadImage(Uri.parse(imageUriString))
+                if (originalBitmap != null) {
+                    setupOverlayWindow()
+                    setupUnlockBubble()
+                } else {
+                    Toast.makeText(this, "Could not load image", Toast.LENGTH_SHORT).show()
+                    stopSelf()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error showing overlay", e)
+                Toast.makeText(this, "Error starting overlay", Toast.LENGTH_SHORT).show()
                 stopSelf()
             }
         }
@@ -120,15 +140,18 @@ class OverlayService : Service() {
         if (view == null) return
         try {
             windowManager.removeView(view)
-        } catch (e: IllegalArgumentException) {
-            // View detached
+        } catch (e: Exception) {
+            // Already detached
         }
     }
 
     private fun loadImage(uri: Uri) {
         try {
             contentResolver.openInputStream(uri)?.use { stream ->
-                originalBitmap = BitmapFactory.decodeStream(stream)
+                val options = BitmapFactory.Options().apply {
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                }
+                originalBitmap = BitmapFactory.decodeStream(stream, null, options)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load reference image", e)
@@ -188,7 +211,9 @@ class OverlayService : Service() {
 
         seekOpacity?.apply {
             max = 80
-            min = 10
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                min = 10
+            }
             progress = (DEFAULT_OPACITY * 100).toInt()
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
