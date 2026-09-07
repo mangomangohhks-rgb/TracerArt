@@ -1,5 +1,6 @@
 package com.tracer.overlay
 
+import com.tracer.overlay.R
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -49,7 +50,6 @@ class OverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
 
-    // --- Window 1: traced image + control bar (activity_overlay.xml) ---
     private var overlayRootView: View? = null
     private var overlayImageView: ImageView? = null
     private var overlayParams: WindowManager.LayoutParams? = null
@@ -59,24 +59,20 @@ class OverlayService : Service() {
     private var currentScale = 1f
     private var scaleGestureDetector: ScaleGestureDetector? = null
 
-    // --- Window 2: tiny always-touchable floating unlock bubble ---
     private var unlockBubble: ImageView? = null
     private var unlockBubbleParams: WindowManager.LayoutParams? = null
 
-    // Drag bookkeeping for image
     private var initialX = 0
     private var initialY = 0
     private var initialTouchX = 0f
     private var initialTouchY = 0f
 
-    // Drag bookkeeping for unlock bubble
     private var bubbleInitialX = 0
     private var bubbleInitialY = 0
     private var bubbleInitialTouchX = 0f
     private var bubbleInitialTouchY = 0f
     private var bubbleIsDragging = false
 
-    // State
     private var isDrawMode = false
     private var isHighContrast = false
     private var isInverted = false
@@ -125,7 +121,7 @@ class OverlayService : Service() {
         try {
             windowManager.removeView(view)
         } catch (e: IllegalArgumentException) {
-            // Already detached
+            // View detached
         }
     }
 
@@ -139,6 +135,10 @@ class OverlayService : Service() {
         }
     }
 
+    private fun getViewId(name: String): Int {
+        return resources.getIdentifier(name, "id", packageName)
+    }
+
     private fun setupOverlayWindow() {
         val bitmap = originalBitmap ?: return
         val displayMetrics = resources.displayMetrics
@@ -146,7 +146,8 @@ class OverlayService : Service() {
         val root = LayoutInflater.from(this).inflate(R.layout.activity_overlay, null)
         overlayRootView = root
 
-        overlayImageView = root.findViewById<ImageView>(R.id.overlayImageView).apply {
+        val imgId = getViewId("overlayImageView")
+        overlayImageView = root.findViewById<ImageView>(if (imgId != 0) imgId else R.id.overlayImageView)?.apply {
             setImageBitmap(bitmap)
         }
 
@@ -173,12 +174,17 @@ class OverlayService : Service() {
             y = (displayMetrics.heightPixels - baseImageHeight) / 4
         }
 
-        // View bindings via explicit IDs
-        val btnLockDraw = root.findViewById<View>(R.id.btnLockDraw) as? Button
-        val btnContrast = root.findViewById<View>(R.id.btnContrast) as? Button
-        val btnInvert = root.findViewById<View>(R.id.btnInvert) as? Button
-        val btnCloseOverlay = root.findViewById<View>(R.id.btnCloseOverlay) as? Button
-        val seekOpacity = root.findViewById<View>(R.id.seekOpacity) as? SeekBar
+        val lockId = getViewId("btnLockDraw")
+        val contrastId = getViewId("btnContrast")
+        val invertId = getViewId("btnInvert")
+        val closeId = getViewId("btnCloseOverlay")
+        val seekId = getViewId("seekOpacity")
+
+        val btnLockDraw = root.findViewById<View>(if (lockId != 0) lockId else R.id.btnLockDraw) as? Button
+        val btnContrast = root.findViewById<View>(if (contrastId != 0) contrastId else R.id.btnContrast) as? Button
+        val btnInvert = root.findViewById<View>(if (invertId != 0) invertId else R.id.btnInvert) as? Button
+        val btnCloseOverlay = root.findViewById<View>(if (closeId != 0) closeId else R.id.btnCloseOverlay) as? Button
+        val seekOpacity = root.findViewById<View>(if (seekId != 0) seekId else R.id.seekOpacity) as? SeekBar
 
         seekOpacity?.apply {
             max = 80
@@ -200,7 +206,7 @@ class OverlayService : Service() {
         btnCloseOverlay?.setOnClickListener { stopSelf() }
 
         updateLockButtonLabel(btnLockDraw)
-        setupDragAndScale(overlayImageView!!)
+        overlayImageView?.let { setupDragAndScale(it) }
 
         windowManager.addView(overlayRootView, overlayParams)
         applyImageFilters()
@@ -298,7 +304,8 @@ class OverlayService : Service() {
     }
 
     private fun updateLockButtonLabel(button: Button?) {
-        val label = button ?: (overlayRootView?.findViewById<View>(R.id.btnLockDraw) as? Button) ?: return
+        val lockId = getViewId("btnLockDraw")
+        val label = button ?: (overlayRootView?.findViewById<View>(if (lockId != 0) lockId else R.id.btnLockDraw) as? Button) ?: return
         label.text = getString(if (isDrawMode) R.string.btn_state_draw else R.string.btn_mode_move)
     }
 
@@ -402,4 +409,3 @@ class OverlayService : Service() {
             .build()
     }
 }
-
