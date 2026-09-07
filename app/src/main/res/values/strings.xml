@@ -1,6 +1,11 @@
 <resources>
-    <string name="app_name">Tracer Overlay</string>
-    <string name="overlay_service_label">Tracing Overlay Service</string>
-    <string name="status_overlay_granted">Overlay Permission: GRANTED</string>
-    <string name="status_overlay_required">Overlay Permission: REQUIRED</string>
+    <string name="app_name">TracerArt</string>
+    <string name="btn_mode_move">MOVE</string>
+    <string name="btn_state_draw">DRAW</string>
+    <string name="btn_contrast">CONTRAST</string>
+    <string name="btn_invert">INVERT</string>
+    <string name="btn_stop">STOP</string>
+    <string name="cd_unlock_bubble">Toggle draw / move lock</string>
+    <string name="notif_text_draw">DRAW mode (pass-through) · tap to unlock</string>
+    <string name="notif_text_move">MOVE mode · tap to lock for drawing</string>
 </resources>
