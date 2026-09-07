@@ -21,6 +21,7 @@ import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
 import android.view.WindowManager
+import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
@@ -48,7 +49,7 @@ class OverlayService : Service() {
 
     private lateinit var windowManager: WindowManager
 
-    // --- Window 1: the traced image + its control bar (activity_overlay.xml) ---
+    // --- Window 1: traced image + control bar (activity_overlay.xml) ---
     private var overlayRootView: View? = null
     private var overlayImageView: ImageView? = null
     private var overlayParams: WindowManager.LayoutParams? = null
@@ -62,21 +63,21 @@ class OverlayService : Service() {
     private var unlockBubble: ImageView? = null
     private var unlockBubbleParams: WindowManager.LayoutParams? = null
 
-    // Drag bookkeeping for setupDragAndScale()
+    // Drag bookkeeping for image
     private var initialX = 0
     private var initialY = 0
     private var initialTouchX = 0f
     private var initialTouchY = 0f
 
-    // Separate drag bookkeeping for the unlock bubble
+    // Drag bookkeeping for unlock bubble
     private var bubbleInitialX = 0
     private var bubbleInitialY = 0
     private var bubbleInitialTouchX = 0f
     private var bubbleInitialTouchY = 0f
     private var bubbleIsDragging = false
 
-    // --- Mode / tracing-optimization state ---
-    private var isDrawMode = false   // false = MOVE (touchable), true = DRAW (locked + pass-through)
+    // State
+    private var isDrawMode = false
     private var isHighContrast = false
     private var isInverted = false
     private var currentOpacity = DEFAULT_OPACITY
@@ -124,7 +125,7 @@ class OverlayService : Service() {
         try {
             windowManager.removeView(view)
         } catch (e: IllegalArgumentException) {
-            // Already detached — safe to ignore.
+            // Already detached
         }
     }
 
@@ -152,7 +153,7 @@ class OverlayService : Service() {
         val targetWidth = (displayMetrics.widthPixels * 0.7f).toInt()
         val aspect = bitmap.height.toFloat() / bitmap.width.toFloat()
         baseImageWidth = targetWidth
- baseImageHeight = (targetWidth * aspect).toInt()
+        baseImageHeight = (targetWidth * aspect).toInt()
 
         (overlayImageView?.layoutParams as? LinearLayout.LayoutParams)?.let { lp ->
             lp.width = baseImageWidth
@@ -172,29 +173,31 @@ class OverlayService : Service() {
             y = (displayMetrics.heightPixels - baseImageHeight) / 4
         }
 
-        val btnLockDraw = root.findViewById<android.widget.Button>(R.id.btnLockDraw)
-        val btnContrast = root.findViewById<android.widget.Button>(R.id.btnContrast)
-        val btnInvert = root.findViewById<android.widget.Button>(R.id.btnInvert)
-        val btnCloseOverlay = root.findViewById<android.widget.Button>(R.id.btnCloseOverlay)
-        val seekOpacity = root.findViewById<SeekBar>(R.id.seekOpacity)
+        // View bindings via explicit IDs
+        val btnLockDraw = root.findViewById<View>(R.id.btnLockDraw) as? Button
+        val btnContrast = root.findViewById<View>(R.id.btnContrast) as? Button
+        val btnInvert = root.findViewById<View>(R.id.btnInvert) as? Button
+        val btnCloseOverlay = root.findViewById<View>(R.id.btnCloseOverlay) as? Button
+        val seekOpacity = root.findViewById<View>(R.id.seekOpacity) as? SeekBar
 
-        seekOpacity.max = 80
-        seekOpacity.min = 10
-        seekOpacity.progress = (DEFAULT_OPACITY * 100).toInt()
+        seekOpacity?.apply {
+            max = 80
+            min = 10
+            progress = (DEFAULT_OPACITY * 100).toInt()
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    currentOpacity = (progress.coerceIn(10, 80) / 100f).coerceIn(MIN_OPACITY, MAX_OPACITY)
+                    applyImageFilters()
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+        }
 
-        btnLockDraw.setOnClickListener { toggleLock() }
-        btnContrast.setOnClickListener { isHighContrast = !isHighContrast; applyImageFilters() }
-        btnInvert.setOnClickListener { isInverted = !isInverted; applyImageFilters() }
-        btnCloseOverlay.setOnClickListener { stopSelf() }
-
-        seekOpacity.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                currentOpacity = (progress.coerceIn(10, 80) / 100f).coerceIn(MIN_OPACITY, MAX_OPACITY)
-                applyImageFilters()
-            }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-        })
+        btnLockDraw?.setOnClickListener { toggleLock() }
+        btnContrast?.setOnClickListener { isHighContrast = !isHighContrast; applyImageFilters() }
+        btnInvert?.setOnClickListener { isInverted = !isInverted; applyImageFilters() }
+        btnCloseOverlay?.setOnClickListener { stopSelf() }
 
         updateLockButtonLabel(btnLockDraw)
         setupDragAndScale(overlayImageView!!)
@@ -294,14 +297,10 @@ class OverlayService : Service() {
         overlayImageView?.alpha = currentOpacity
     }
 
-    private fun updateLockButtonLabel(button: android.widget.Button?) {
-        val label = button ?: overlayRootView?.findViewById(R.id.btnLockDraw) ?: return
+    private fun updateLockButtonLabel(button: Button?) {
+        val label = button ?: (overlayRootView?.findViewById<View>(R.id.btnLockDraw) as? Button) ?: return
         label.text = getString(if (isDrawMode) R.string.btn_state_draw else R.string.btn_mode_move)
     }
-
-    // ---------------------------------------------------------------------
-    // Window 2: floating unlock bubble
-    // ---------------------------------------------------------------------
 
     private fun setupUnlockBubble() {
         val sizePx = (48 * resources.displayMetrics.density).toInt()
@@ -403,3 +402,4 @@ class OverlayService : Service() {
             .build()
     }
 }
+
