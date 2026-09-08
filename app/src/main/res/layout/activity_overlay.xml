@@ -3,51 +3,103 @@
     android:id="@+id/overlayRoot"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    android:background="#80000000"
+    android:padding="4dp">
 
+    <!-- Control Panel -->
     <LinearLayout
-        android:id="@+id/controlBar"
+        android:id="@+id/panelControls"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
+        android:orientation="vertical"
         android:padding="4dp">
 
-        <Button
-            android:id="@+id/btnLockDraw"
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/btn_mode_move" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
-        <Button
-            android:id="@+id/btnContrast"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
-            android:text="@string/btn_contrast" />
+            <Button
+                android:id="@+id/btnLockDraw"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:textSize="12sp"
+                android:text="@string/btn_mode_move" />
 
-        <Button
-            android:id="@+id/btnInvert"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
-            android:text="@string/btn_invert" />
+            <Button
+                android:id="@+id/btnContrast"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                android:textSize="12sp"
+                android:text="@string/btn_contrast" />
 
-        <Button
-            android:id="@+id/btnCloseOverlay"
+            <Button
+                android:id="@+id/btnInvert"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                android:textSize="12sp"
+                android:text="@string/btn_invert" />
+
+            <Button
+                android:id="@+id/btnCloseOverlay"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                android:textSize="12sp"
+                android:text="@string/btn_stop" />
+        </LinearLayout>
+
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
-            android:text="@string/btn_stop" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="2dp">
+
+            <Button
+                android:id="@+id/btnFitWidth"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:textSize="12sp"
+                android:text="Fit Width" />
+
+            <Button
+                android:id="@+id/btnFitHeight"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                android:textSize="12sp"
+                android:text="Fit Height" />
+
+            <Button
+                android:id="@+id/btnRecenter"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                android:textSize="12sp"
+                android:text="Center" />
+
+            <Button
+                android:id="@+id/btnResetSize"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginStart="4dp"
+                android:textSize="12sp"
+                android:text="Reset" />
+        </LinearLayout>
+
+        <SeekBar
+            android:id="@+id/seekOpacity"
+            android:layout_width="200dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:max="80"
+            android:progress="20" />
     </LinearLayout>
-
-    <SeekBar
-        android:id="@+id/seekOpacity"
-        android:layout_width="220dp"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="4dp"
-        android:max="80"
-        android:progress="30" />
 
     <ImageView
         android:id="@+id/overlayImageView"
