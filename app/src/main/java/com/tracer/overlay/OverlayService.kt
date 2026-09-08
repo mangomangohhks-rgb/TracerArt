@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.PixelFormat
@@ -42,9 +43,9 @@ class OverlayService : Service() {
         private const val CHANNEL_ID = "tracer_overlay_channel"
         private const val NOTIF_ID = 1001
 
-        private const val MIN_OPACITY = 0.10f
-        private const val MAX_OPACITY = 0.80f
-        private const val DEFAULT_OPACITY = 0.30f
+        private const val MIN_OPACITY = 0.05f
+        private const val MAX_OPACITY = 0.85f
+        private const val DEFAULT_OPACITY = 0.25f
         private const val TAP_MOVE_SLOP_PX = 12f
     }
 
@@ -52,12 +53,13 @@ class OverlayService : Service() {
 
     private var overlayRootView: View? = null
     private var overlayImageView: ImageView? = null
+    private var panelControls: View? = null
     private var overlayParams: WindowManager.LayoutParams? = null
     private var originalBitmap: Bitmap? = null
+
     private var baseImageWidth = 0
     private var baseImageHeight = 0
-    private var currentScale = 1f
-    private var scaleGestureDetector: ScaleGestureDetector? = null
+    private var currentScale = 1.0f
 
     private var unlockBubble: ImageView? = null
     private var unlockBubbleParams: WindowManager.LayoutParams? = null
@@ -141,17 +143,14 @@ class OverlayService : Service() {
         try {
             windowManager.removeView(view)
         } catch (e: Exception) {
-            // Already detached
+            // Detached
         }
     }
 
     private fun loadImage(uri: Uri) {
         try {
             contentResolver.openInputStream(uri)?.use { stream ->
-                val options = BitmapFactory.Options().apply {
-                    inPreferredConfig = Bitmap.Config.ARGB_8888
-                }
-                originalBitmap = BitmapFactory.decodeStream(stream, null, options)
+                originalBitmap = BitmapFactory.decodeStream(stream)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load reference image", e)
@@ -169,21 +168,19 @@ class OverlayService : Service() {
         val root = LayoutInflater.from(this).inflate(R.layout.activity_overlay, null)
         overlayRootView = root
 
+        panelControls = root.findViewById(getViewId("panelControls"))
+
         val imgId = getViewId("overlayImageView")
         overlayImageView = root.findViewById<ImageView>(if (imgId != 0) imgId else R.id.overlayImageView)?.apply {
             setImageBitmap(bitmap)
         }
 
-        val targetWidth = (displayMetrics.widthPixels * 0.7f).toInt()
+        val targetWidth = (displayMetrics.widthPixels * 0.85f).toInt()
         val aspect = bitmap.height.toFloat() / bitmap.width.toFloat()
         baseImageWidth = targetWidth
         baseImageHeight = (targetWidth * aspect).toInt()
 
-        (overlayImageView?.layoutParams as? LinearLayout.LayoutParams)?.let { lp ->
-            lp.width = baseImageWidth
-            lp.height = baseImageHeight
-            overlayImageView?.layoutParams = lp
-        }
+        currentScale = 1.0f
 
         overlayParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -197,27 +194,50 @@ class OverlayService : Service() {
             y = (displayMetrics.heightPixels - baseImageHeight) / 4
         }
 
-        val lockId = getViewId("btnLockDraw")
-        val contrastId = getViewId("btnContrast")
-        val invertId = getViewId("btnInvert")
-        val closeId = getViewId("btnCloseOverlay")
-        val seekId = getViewId("seekOpacity")
+        applyDimensions()
 
-        val btnLockDraw = root.findViewById<View>(if (lockId != 0) lockId else R.id.btnLockDraw) as? Button
-        val btnContrast = root.findViewById<View>(if (contrastId != 0) contrastId else R.id.btnContrast) as? Button
-        val btnInvert = root.findViewById<View>(if (invertId != 0) invertId else R.id.btnInvert) as? Button
-        val btnCloseOverlay = root.findViewById<View>(if (closeId != 0) closeId else R.id.btnCloseOverlay) as? Button
-        val seekOpacity = root.findViewById<View>(if (seekId != 0) seekId else R.id.seekOpacity) as? SeekBar
+        val btnLockDraw = root.findViewById<View>(getViewId("btnLockDraw")) as? Button
+        val btnContrast = root.findViewById<View>(getViewId("btnContrast")) as? Button
+        val btnInvert = root.findViewById<View>(getViewId("btnInvert")) as? Button
+        val btnCloseOverlay = root.findViewById<View>(getViewId("btnCloseOverlay")) as? Button
+        val seekOpacity = root.findViewById<View>(getViewId("seekOpacity")) as? SeekBar
+
+        val btnFitWidth = root.findViewById<View>(getViewId("btnFitWidth")) as? Button
+        val btnFitHeight = root.findViewById<View>(getViewId("btnFitHeight")) as? Button
+        val btnRecenter = root.findViewById<View>(getViewId("btnRecenter")) as? Button
+        val btnResetSize = root.findViewById<View>(getViewId("btnResetSize")) as? Button
+
+        btnFitWidth?.setOnClickListener {
+            val screenWidth = resources.displayMetrics.widthPixels.toFloat()
+            currentScale = screenWidth / baseImageWidth.toFloat()
+            applyDimensions()
+        }
+
+        btnFitHeight?.setOnClickListener {
+            val screenHeight = (resources.displayMetrics.heightPixels * 0.75f)
+            currentScale = screenHeight / baseImageHeight.toFloat()
+            applyDimensions()
+        }
+
+        btnRecenter?.setOnClickListener {
+            recenterOverlay()
+        }
+
+        btnResetSize?.setOnClickListener {
+            currentScale = 1.0f
+            applyDimensions()
+            recenterOverlay()
+        }
 
         seekOpacity?.apply {
             max = 80
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                min = 10
+                min = 5
             }
             progress = (DEFAULT_OPACITY * 100).toInt()
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    currentOpacity = (progress.coerceIn(10, 80) / 100f).coerceIn(MIN_OPACITY, MAX_OPACITY)
+                    currentOpacity = (progress.coerceIn(5, 80) / 100f).coerceIn(MIN_OPACITY, MAX_OPACITY)
                     applyImageFilters()
                 }
                 override fun onStartTrackingTouch(seekBar: SeekBar?) {}
@@ -237,20 +257,80 @@ class OverlayService : Service() {
         applyImageFilters()
     }
 
+    private fun recenterOverlay() {
+        val displayMetrics = resources.displayMetrics
+        val calculatedWidth = (baseImageWidth * currentScale).toInt()
+        val calculatedHeight = (baseImageHeight * currentScale).toInt()
+
+        overlayParams?.apply {
+            x = ((displayMetrics.widthPixels - calculatedWidth) / 2).coerceAtLeast(0)
+            y = ((displayMetrics.heightPixels - calculatedHeight) / 3).coerceAtLeast(0)
+        }
+
+        overlayParams?.let { params ->
+            overlayRootView?.let { root ->
+                try {
+                    windowManager.updateViewLayout(root, params)
+                } catch (e: Exception) {
+                    // Ignore layout update race conditions
+                }
+            }
+        }
+    }
+
+    private fun applyDimensions() {
+        val displayMetrics = resources.displayMetrics
+        val minWidthPx = (250 * displayMetrics.density).toInt()
+
+        val calculatedWidth = (baseImageWidth * currentScale).toInt().coerceAtLeast(minWidthPx)
+        val calculatedHeight = (baseImageHeight * currentScale).toInt().coerceAtLeast(minWidthPx / 2)
+
+        overlayImageView?.let { img ->
+            val lp = img.layoutParams ?: LinearLayout.LayoutParams(calculatedWidth, calculatedHeight)
+            lp.width = calculatedWidth
+            lp.height = calculatedHeight
+            img.layoutParams = lp
+            img.requestLayout()
+        }
+
+        clampPositionToBounds()
+    }
+
+    private fun clampPositionToBounds() {
+        val displayMetrics = resources.displayMetrics
+        val params = overlayParams ?: return
+
+        val calculatedWidth = (baseImageWidth * currentScale).toInt()
+        val calculatedHeight = (baseImageHeight * currentScale).toInt()
+
+        // Keep at least 100px of image on-screen horizontally and vertically
+        val minX = -calculatedWidth + 100
+        val maxX = displayMetrics.widthPixels - 100
+        val minY = 0
+        val maxY = displayMetrics.heightPixels - 100
+
+        params.x = params.x.coerceIn(minX, maxX)
+        params.y = params.y.coerceIn(minY, maxY)
+
+        overlayRootView?.let { root ->
+            try {
+                windowManager.updateViewLayout(root, params)
+            } catch (e: Exception) {
+                // Ignore layout update race conditions
+            }
+        }
+    }
+
     private fun setupDragAndScale(target: View) {
-        scaleGestureDetector = ScaleGestureDetector(
+        val scaleGestureDetector = ScaleGestureDetector(
             this,
             object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
                 override fun onScale(detector: ScaleGestureDetector): Boolean {
-                    currentScale = (currentScale * detector.scaleFactor).coerceIn(0.2f, 6f)
-                    val params = overlayParams ?: return true
-                    (overlayImageView?.layoutParams as? LinearLayout.LayoutParams)?.let { lp ->
-                        lp.width = (baseImageWidth * currentScale).toInt().coerceAtLeast(50)
-                        lp.height = (baseImageHeight * currentScale).toInt().coerceAtLeast(50)
-                        overlayImageView?.layoutParams = lp
-                    }
-                    overlayImageView?.requestLayout()
-                    windowManager.updateViewLayout(overlayRootView, params)
+                    val factor = detector.scaleFactor
+                    if (factor.isNaN() || factor == 0f) return true
+
+                    currentScale = (currentScale * factor).coerceIn(0.3f, 5.0f)
+                    applyDimensions()
                     return true
                 }
             }
@@ -259,7 +339,7 @@ class OverlayService : Service() {
         target.setOnTouchListener { _, event ->
             if (isDrawMode) return@setOnTouchListener false
 
-            scaleGestureDetector?.onTouchEvent(event)
+            scaleGestureDetector.onTouchEvent(event)
 
             val params = overlayParams ?: return@setOnTouchListener false
             when (event.actionMasked) {
@@ -270,10 +350,10 @@ class OverlayService : Service() {
                     initialTouchY = event.rawY
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    if (event.pointerCount == 1) {
+                    if (event.pointerCount == 1 && !scaleGestureDetector.isInProgress) {
                         params.x = initialX + (event.rawX - initialTouchX).toInt()
                         params.y = initialY + (event.rawY - initialTouchY).toInt()
-                        windowManager.updateViewLayout(overlayRootView, params)
+                        clampPositionToBounds()
                     }
                 }
             }
@@ -335,12 +415,12 @@ class OverlayService : Service() {
     }
 
     private fun setupUnlockBubble() {
-        val sizePx = (48 * resources.displayMetrics.density).toInt()
+        val sizePx = (40 * resources.displayMetrics.density).toInt()
         val bubble = ImageView(this).apply {
             setImageResource(android.R.drawable.ic_menu_edit)
-            setBackgroundColor(0xCC000000.toInt())
+            setBackgroundColor(0x99000000.toInt())
             contentDescription = getString(R.string.cd_unlock_bubble)
-            setPadding(16, 16, 16, 16)
+            setPadding(12, 12, 12, 12)
         }
         unlockBubble = bubble
 
@@ -352,8 +432,8 @@ class OverlayService : Service() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = resources.displayMetrics.widthPixels - sizePx - 32
-            y = 100
+            x = resources.displayMetrics.widthPixels - sizePx - 20
+            y = 80
         }
 
         bubble.setOnTouchListener { _, event ->
@@ -396,6 +476,10 @@ class OverlayService : Service() {
     private fun toggleLock() {
         isDrawMode = !isDrawMode
         applyTouchFlags()
+
+        panelControls?.visibility = if (isDrawMode) View.GONE else View.VISIBLE
+        overlayRootView?.setBackgroundColor(if (isDrawMode) Color.TRANSPARENT else 0x80000000.toInt())
+
         updateLockButtonLabel(null)
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
